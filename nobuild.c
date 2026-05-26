@@ -1,12 +1,14 @@
-#include <stdio.h>
-#include <stdbool.h>
+#include <assert.h>
+#include <stdlib.h>
+#include <stdarg.h>
 
 typedef struct{
-    const char **args;
+    const char **items;
     size_t count;
     size_t capacity;
 } Cmd;
 
+#define DA_INIT_CAP 256
 #define da_append(da, item)                                                           \
     do {                                                                              \
         if ((da)->count >= (da)->capacity) {                                          \
@@ -21,6 +23,16 @@ typedef struct{
 
 void cmd_append_null(Cmd *cmd, ...)
 {
+    va_list args;
+    va_start(args, cmd); 
+
+    const char *arg = va_arg(args, const char*);
+    while(arg != NULL) {
+        da_append(cmd, arg);
+        arg = va_arg(args, const char*);
+    }
+
+    va_end(args);
     (void)cmd;
 }
 
