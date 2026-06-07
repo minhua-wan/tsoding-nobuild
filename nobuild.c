@@ -2,12 +2,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
-typedef struct{
-    const char **items;
-    size_t count;
-    size_t capacity;
-} Cmd;
-
 #define DA_INIT_CAP 256
 #define da_append(da, item)                                                           \
     do {                                                                              \
@@ -19,6 +13,23 @@ typedef struct{
         (da)->items[(da)->count++] = (item);                                          \
     } while(0)                                                                        \
 
+
+typedef struct{
+    char *items;
+    size_t count;
+    size_t capacity;
+} String_Builder;
+
+typedef struct{
+    const char **items;
+    size_t count;
+    size_t capacity;
+} Cmd;
+
+void cmd_render(Cmd cmd, String_Builder *render)
+{
+
+}
 
 
 void cmd_append_null(Cmd *cmd, ...)
@@ -34,6 +45,51 @@ void cmd_append_null(Cmd *cmd, ...)
 
     va_end(args);
     (void)cmd;
+}
+
+
+#ifdef _WIN32
+typedef HANDLE Pid;
+#else
+typedef int Pid;
+#endif // _WIN32
+
+Pid cmd_run_sync(Cmd cmd)
+{
+    pid_t cpid = fork();
+    if (cpid < 0)
+    {
+	PANIC("Could not fork child process: %s: %s",
+		cmd_show(cmd), strerror(errno));
+    }
+
+    if (cpid == 0) 
+    {
+	Cstr_Array args = cstr_array_append(cmd.line, NULL);
+
+	if (fdin)
+	{
+	    if (dup2(*fdin, STDIN_FILENO) < 0) 
+	    {
+		PANIC("Could not setup stdin for child process: %s", strerror(errno));
+	    }
+	}
+
+	if (fdout) 
+	{
+	    if (dup2(*fdout, STDOUT_FILENO) < 0)
+	    {
+		PANIC("Could not setup stdout for child process: %s", strerror(errno));
+	    }
+	}
+
+	if (execvp(args.elems[0], (char * const*) args.elems) < 0)
+	{
+	    PANIC("Could not exec child process: %s: %s", cmd_show(cmd), strerror(errno));
+	}
+    }
+
+    return cpid;
 }
 
 int cmd_run(Cmd cmd)
@@ -92,10 +148,10 @@ int main(void)
     Cmd cmd = {0};
     platform_compiler(&cmd);
     cflags(&cmd);
-    cmd_append(&cmd, "-o", "musializer");
+    cmd_append(&cmd, "-o", "./build/musializer");
     musializer_src(&cmd);
     link_libraries(&cmd);
 
     if (cmd_run(cmd) != 0) return 1;
-	return 0;
+    return 0;
 }
