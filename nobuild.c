@@ -4,6 +4,15 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <errno.h>
+#include <sys/types.h>
+
+#if _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <sys/wait.h>
+#endif // _WIN32
 
 #define DA_INIT_CAP 256
 #define da_append(da, item)                                                           \
@@ -97,57 +106,70 @@ void cmd_append_null(Cmd *cmd, ...)
 
 
 #ifdef _WIN32
-// typedef HANDLE Pid;
-typedef int Pid;
+typedef HANDLE Proc;
+#define INVALID_PROC NULL
 #else
-typedef int Pid;
+typedef int Proc;
+#define INVALID_PROC -1
 #endif // _WIN32
 
-bool cmd_run_sync(Cmd cmd)
+Proc cmd_run_async(Cmd cmd)
 {
     String_Builder sb = {0};
     cmd_render(cmd, &sb);
     sb_append_null(&sb);
-    printf("cmd_run_sync: %s\n", sb.items);
-    free(sb.items);
-    cmd_render(cmd, &sb);
-#if 0
+    fprintf(stderr, "[CMD] %s\n", sb.items);
+
     pid_t cpid = fork();
     if (cpid < 0)
     {
-	PANIC("Could not fork child process: %s: %s",
-		cmd_show(cmd), strerror(errno));
+        fprintf(stderr, "[ERROR] Could not fork child proc: %s: %s\n", sb.items, strerror(errno));
+        return INVALID_PROC;
     }
 
     if (cpid == 0) 
     {
-	Cstr_Array args = cstr_array_append(cmd.line, NULL);
-
-	if (fdin)
-	{
-	    if (dup2(*fdin, STDIN_FILENO) < 0) 
-	    {
-		PANIC("Could not setup stdin for child process: %s", strerror(errno));
-	    }
-	}
-
-	if (fdout) 
-	{
-	    if (dup2(*fdout, STDOUT_FILENO) < 0)
-	    {
-		PANIC("Could not setup stdout for child process: %s", strerror(errno));
-	    }
-	}
-
-	if (execvp(args.elems[0], (char * const*) args.elems) < 0)
-	{
-	    PANIC("Could not exec child process: %s: %s", cmd_show(cmd), strerror(errno));
-	}
+        if (execvp(cmd.items, (char * const*) cmd.items) < 0) {
+            fprintf("[ERROR] Could not exec child proc: %s", strerror(errno));
+            exit(1);
+        }
+        assert(0 && "unreachable");
     }
 
     return cpid;
-#endif // 0
-    return 0;
+}
+
+bool proc_wait(Proc p)
+{
+    for(;;) {
+        int wstatus = 0;
+        if (waitpid(p, &wstatus, 0) < 0) {
+           sprintf(stderr, "[ERROR] could not wait on command(pid %d): %s", p, stderror(errno));
+           return false;
+        }
+        if (WIFEXITED(wstatus)) {
+            int exit_status = WEXITSTATUS(wstatus);
+            if (exit_status != 0) {
+                sprintf(stderr, "[ERROR] command exited with exit code %s", exit_status);
+                return false;
+            }
+
+            break;
+        }
+        if (WIFSIGNALED(wstatus)) {
+            sprintf(stderr, "[ERROR] command process was terminated by %s", strsignal(WTERMSIG(wstatus)));
+            return false;
+        }
+    }
+    return true;
+}
+
+bool cmd_run_sync(Cmd cmd)
+{
+    Proc p = cmd_run_async(cmd);
+    if (p == INVALID_PROC) return false;
+
+    return proc_wait(p);
 }
 
 int cmd_run(Cmd cmd)
@@ -212,6 +234,6 @@ int main(void)
     cmd_append(&cmd, "foo bar hello.c");
 
     //if (cmd_run(cmd) != 0) return 1;
-    if (!cmd_run_sync(cmd)) return 1;
+    if (!cmd_run_async(cmd)) return 1;
     return 0;
 }
