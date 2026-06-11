@@ -129,8 +129,8 @@ Proc cmd_run_async(Cmd cmd)
 
     if (cpid == 0) 
     {
-        if (execvp(cmd.items, (char * const*) cmd.items) < 0) {
-            fprintf("[ERROR] Could not exec child proc: %s", strerror(errno));
+        if (execvp(*cmd.items, (char * const*) cmd.items) < 0) {
+            fprintf(stderr, "[ERROR] Could not exec child proc: %s", strerror(errno));
             exit(1);
         }
         assert(0 && "unreachable");
@@ -144,20 +144,20 @@ bool proc_wait(Proc p)
     for(;;) {
         int wstatus = 0;
         if (waitpid(p, &wstatus, 0) < 0) {
-           sprintf(stderr, "[ERROR] could not wait on command(pid %d): %s", p, stderror(errno));
+           fprintf(stderr, "[ERROR] could not wait on command(pid %d): %s", p, strerror(errno));
            return false;
         }
         if (WIFEXITED(wstatus)) {
             int exit_status = WEXITSTATUS(wstatus);
             if (exit_status != 0) {
-                sprintf(stderr, "[ERROR] command exited with exit code %s", exit_status);
+                fprintf(stderr, "[ERROR] command exited with exit code %d", exit_status);
                 return false;
             }
 
             break;
         }
         if (WIFSIGNALED(wstatus)) {
-            sprintf(stderr, "[ERROR] command process was terminated by %s", strsignal(WTERMSIG(wstatus)));
+            fprintf(stderr, "[ERROR] command process was terminated by %s", strsignal(WTERMSIG(wstatus)));
             return false;
         }
     }
@@ -192,7 +192,7 @@ void cflags(Cmd *cmd)
 {
     cmd_append(cmd, "-Wall");
     cmd_append(cmd, "-Wextra");
-    cmd_append(cmd, "-gdb");
+    cmd_append(cmd, "-ggdb");
 #ifdef _WIN32
     cmd_append(cmd, "-I./raylib-4.5.0_win64_mingw-w64/include");
 #else
